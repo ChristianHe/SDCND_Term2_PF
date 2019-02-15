@@ -58,6 +58,15 @@ class ParticleFilter {
                   double yaw_rate);
   
   /**
+   * transform the observation from car coordinate to map coordinate.
+   * 
+   * @param p particle
+   * @param obs observation to be transformed.
+   * @output transformed observation.
+   */
+  LandmarkObs transform_obs(const Particle &p, const LandmarkObs &obs);
+
+  /**
    * dataAssociation Finds which observations correspond to which landmarks 
    *   (likely by using a nearest-neighbors data association).
    * @param predicted Vector of predicted landmark observations
