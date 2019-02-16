@@ -20,6 +20,8 @@
 
 using std::string;
 using std::vector;
+using std::cout;
+using std::endl;
 using std::normal_distribution;
 using std::uniform_int_distribution;
 using std::uniform_real_distribution;
@@ -36,7 +38,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
    * NOTE: Consult particle_filter.h for more information about this method 
    *   (and others in this file).
    */
-  num_particles = 1000;  // TODO: Set the number of particles
+  num_particles = 10;  // TODO: Set the number of particles
 
   random_device rd; // non-deteministic random number as the seed
   mt19937 mt(rd()); // mt random number generator
@@ -46,27 +48,26 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   normal_distribution<double> dist_y(y, std[1]);
   normal_distribution<double> dist_theta(theta, std[2]);
 
+  cout << "Init with GPS, x: "<< x << " y: " << y << " theta: " << theta << endl;
+
   for(int i = 0; i < num_particles; i++)
   {
     Particle p;
-
-    p.id = i;
-    p.weight = 1.0;
 
     //Sample from these normal distributions
     p.x = dist_x(mt);
     p.y = dist_y(mt);
     p.theta = dist_theta(mt);
 
+    p.weight = 1.0;
+
     particles.push_back(p);
 
-    weights.push_back(1.0);
+    weights.push_back(p.weight);
+
+    std::cout << "init particle id: " << i << " x: " << particles[i].x << " y: " << particles[i].y << " theta: " << particles[i].theta << std::endl; 
   }
   
-  std::cout << "init particles size: " << particles.size() << std::endl; 
-
-  std::cout << "init weights size: " << weights.size() << std::endl;
-
   is_initialized = true;
 }
 
@@ -100,6 +101,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
         post_x = x + velocity*delta_t*cos(theta);
         post_y = y + velocity*delta_t*sin(theta);
     }
+    
 
     post_theta = theta + yaw_rate*delta_t;
 
@@ -112,6 +114,10 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
     particles[i].x = dist_x(mt);
     particles[i].y = dist_y(mt);
     particles[i].theta = dist_theta(mt);
+
+    /*cout << "predict with velocity: " << velocity << " yawrate: " << yaw_rate << 
+    " predicted id: " << i << " x: " << post_x << " y: " << post_y <<
+    " theta: " << post_theta << endl;*/
   }
 }
 
@@ -141,7 +147,7 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
-  
+
   //for all the observations, associate its id with the nearest predicted landmark id.
   for(u_int i = 0; i < observations.size(); i++)
   {
@@ -152,13 +158,13 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
     for (u_int j = 0; j < predicted.size(); ++j) 
     {
       // Calculate Euclidean distance
-      curr_dist = sqrt(pow(predicted[i].x - observations[j].x, 2)
-                     + pow(predicted[i].y - observations[j].y, 2));
+      curr_dist = sqrt(pow(predicted[j].x - observations[i].x, 2)
+                     + pow(predicted[j].y - observations[i].y, 2));
       // Compare to min_dist and update if closest
       if (curr_dist < min_dist) 
       {
         min_dist = curr_dist;
-        closest_landmark = j;
+        closest_landmark = predicted[j].id;
       }
     }
 
@@ -182,24 +188,23 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   and the following is a good resource for the actual equation to implement
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
-
-  vector<LandmarkObs> observations_pred;
-  vector<LandmarkObs> observations_trans;
-  double weight_all = 0.0;
   
   //for each particle, do the following:
   for(u_int i = 0; i < particles.size(); i++)
   {
     double probs = 1.0;
 
+    vector<LandmarkObs> observations_pred;
+    vector<LandmarkObs> observations_trans;
+    
     //get the predited measurement which is map landmarks within sensor range.
     for(u_int k = 0; k < map_landmarks.landmark_list.size(); k++)
     {
       double distance = 0.0;
       LandmarkObs obs;
-      obs.id = map_landmarks.landmark_list[i].id_i;
-      obs.x  = map_landmarks.landmark_list[i].x_f;
-      obs.y  = map_landmarks.landmark_list[i].y_f;
+      obs.id = map_landmarks.landmark_list[k].id_i;
+      obs.x  = map_landmarks.landmark_list[k].x_f;
+      obs.y  = map_landmarks.landmark_list[k].y_f;
 
       distance = dist(particles[i].x, particles[i].y, obs.x, obs.y);
 
@@ -208,7 +213,13 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         observations_pred.push_back(obs);
       }
     }
-    
+
+    /*for(u_int z = 0; z < observations_pred.size(); z++)
+    {
+      cout << "particle id: " << i << " pred meas mark id: " << observations_pred[z].id 
+           << " x: " << observations_pred[z].x << " y: " << observations_pred[z].y << endl;
+    }*/
+
     //perform the transform of the observation measurements
     for(u_int j = 0; j < observations.size(); j++)
     {
@@ -217,23 +228,41 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       observations_trans.push_back(ob_trans);
     }
 
+    /*for(u_int z = 0; z < observations_trans.size(); z++)
+    {
+      cout << "particle id: " << i << " trans obs meas mark id: " << observations_trans[z].id 
+           << " x: " << observations_trans[z].x << " y: " << observations_trans[z].y << endl;
+    }*/
+
     //associate the transformed observation measurement with the landmarks
     dataAssociation(observations_pred, observations_trans);
 
+    /*for(u_int z = 0; z < observations_trans.size(); z++)
+    {
+      cout << "particle id: " << i << " ossociated obs meas mark id: " << observations_trans[z].id 
+           << " x: " << observations_trans[z].x << " y: " << observations_trans[z].y << endl;
+    }*/
+
+    particles[i].associations.clear();
+    particles[i].sense_x.clear();
+    particles[i].sense_y.clear();
+    
     for(u_int j = 0; j < observations_trans.size(); j++)
     {
       particles[i].associations.push_back(observations_trans[j].id);
       particles[i].sense_x.push_back(observations_trans[j].x);
       particles[i].sense_y.push_back(observations_trans[j].y);
+
+      /*cout << "particle id: " << i << " obs meas mark id: " << particles[i].associations[j] 
+           << " x: " << particles[i].sense_x[j] << " y: " << particles[i].sense_y[j] << endl;*/
     }
 
-    
     //calculate the probability of each observation with multi Guassian pdf.
     for(u_int j = 0; j < particles[i].associations.size(); j++)
     {
-      double mu_x;
-      double mu_y;
-      double prob;
+      double mu_x = 0.0;
+      double mu_y = 0.0;
+      double prob = 0.0;
 
       for(u_int k = 0; k < observations_pred.size(); k++)
       {
@@ -245,27 +274,35 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         }
       }
 
+      // multi-probability may exceed 1 in case of each exceed 0.5.
       prob = multiv_prob(std_landmark[0], std_landmark[1], 
-                         particles[i].sense_x[j], particles[i].sense_x[j],
+                         particles[i].sense_x[j], particles[i].sense_y[j],
                          mu_x, mu_y);
 
+      /*cout << "particle id: " << i << " obs mark id: " << particles[i].associations[j] 
+           << " x: " << particles[i].sense_x[j] << " y: " << particles[i].sense_y[j]
+           << " mu_x: " << mu_x << " mu_y: " << mu_y << " prob: " << prob << endl;*/
+
       //multiply each probability to get the weight
-      probs *= prob;
-        
+      probs *= prob;  
     }
 
     weights[i] = probs;
+  }
 
-    //all weights, for normalization.
-    weight_all += weights[i];
+  double weight_sum = 0.0;
+  for(u_int i = 0; i < weights.size(); i++)
+  {
+    weight_sum += weights[i];
   }
 
   //normalized the weight.
   for(u_int i = 0; i < weights.size(); i++)
   {
-    weights[i] /= weight_all;
+    weights[i] /= weight_sum;
     particles[i].weight = weights[i];
   }
+
 }
 
 void ParticleFilter::resample() {
@@ -278,7 +315,7 @@ void ParticleFilter::resample() {
   random_device rd; // non-deteministic random number as the seed
   mt19937 mt(rd()); // mt random number generator
 
-  uniform_int_distribution<int> dist_index(1,1000);
+  uniform_int_distribution<int> dist_index(1,num_particles);
   uniform_real_distribution<double> dist_beta(0.0, 1.0);
 
   vector<Particle> post_particles;
@@ -307,7 +344,9 @@ void ParticleFilter::resample() {
     post_particles.push_back(particles[index]);
   }
   
-  particles = post_particles;
+  //particles = post_particles;
+  particles.assign(post_particles.begin(), post_particles.end());
+
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 
